@@ -8,7 +8,7 @@ import json
 import warnings
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Optional, Tuple, Union, cast
 
 import numpy as np
 from pydantic import Field, constr, field_validator, model_serializer
@@ -30,11 +30,13 @@ from ...periodic_table import periodictable
 from ...physical_constants import constants
 from ...testing import compare, compare_values
 from ...util import deserialize, measure_coordinates, msgpackext_loads, provenance_stamp, which_import
-from .basemodels import ProtoModel, qcschema_draft
-from .common_models import Provenance, qcschema_molecule_default
+from .basemodels import ProtoModel, check_convertible_version, qcschema_draft
+from .common_models import Provenance
 from .types import Array
 
 if TYPE_CHECKING:
+    import qcelemental
+
     from .common_models import ReprArgs
 
 # Rounding quantities for hashing
@@ -120,14 +122,11 @@ class Molecule(ProtoModel):
 
     """
 
-    schema_name: constr(strip_whitespace=True, pattern="^(qcschema_molecule)$") = Field(  # type: ignore
-        qcschema_molecule_default,
-        description=(
-            f"The QCSchema specification to which this model conforms. Explicitly fixed as {qcschema_molecule_default}."
-        ),
+    schema_name: Literal["qcschema_molecule"] = Field(
+        "qcschema_molecule", description=(f"The QCSchema specification to which this model conforms.")
     )
-    schema_version: int = Field(  # type: ignore
-        2,  # TODO Turn to Literal[3] = Field(3)
+    schema_version: Literal[3] = Field(
+        3,
         description="The version number of :attr:`~qcelemental.models.Molecule.schema_name` to which this model conforms.",
     )
     validated: bool = Field(  # type: ignore
@@ -370,7 +369,7 @@ class Molecule(ProtoModel):
 
         if validate:
             kwargs["schema_name"] = kwargs.pop("schema_name", "qcschema_molecule")
-            kwargs["schema_version"] = kwargs.pop("schema_version", 2)
+            kwargs["schema_version"] = kwargs.pop("schema_version", 3)
             # original_keys = set(kwargs.keys())  # revive when ready to revisit sparsity
 
             nonphysical = kwargs.pop("nonphysical", False)
@@ -402,12 +401,6 @@ class Molecule(ProtoModel):
             values["geometry"] = float_prep(self._orient_molecule_internal(), geometry_noise)
         elif validate or geometry_prep:
             values["geometry"] = float_prep(values["geometry"], geometry_noise)
-
-    @field_validator("schema_version", mode="before")
-    def _version_stamp(cls, v):
-        # seemingly unneeded, this lets conver_v re-label the model w/o discarding model and
-        #   submodel version fields first.
-        return 2  # TODO 3
 
     @field_validator("geometry")
     @classmethod
@@ -442,9 +435,7 @@ class Molecule(ProtoModel):
         if "fragments_" in info.data and info.data["fragments_"] is not None:
             n = len(info.data["fragments_"])
             if len(v) != n:
-                raise ValueError(
-                    "Fragment Charges must be same number of entries as Fragments"
-                )
+                raise ValueError("Fragment Charges must be same number of entries as Fragments")
         return v
 
     @field_validator("fragment_multiplicities_")
@@ -926,6 +917,7 @@ class Molecule(ProtoModel):
         ... ''')
         >>> two_pentanol_radcat.get_molecular_formula(chgmult=True)
         2^C5H12O+
+
         Notes
         -----
         This includes all atoms in the molecule, including ghost atoms. See :py:meth:`element_composition` to exclude.
@@ -997,7 +989,7 @@ class Molecule(ProtoModel):
         if dtype in ["string", "psi4", "xyz", "xyz+"]:
             mol_dict = from_string(data, dtype if dtype != "string" else None)
             assert isinstance(mol_dict, dict)
-            input_dict = to_schema(mol_dict["qm"], dtype=2, np_out=True)
+            input_dict = to_schema(mol_dict["qm"], dtype=3, np_out=True)
             input_dict = _filter_defaults(input_dict)
             input_dict["validated"] = True
             input_dict["_geometry_prep"] = True
@@ -1009,7 +1001,7 @@ class Molecule(ProtoModel):
                 "units": kwargs.pop("units", "Angstrom"),
                 "fragment_separators": kwargs.pop("frags", []),
             }
-            input_dict = to_schema(from_arrays(**data), dtype=2, np_out=True)
+            input_dict = to_schema(from_arrays(**data), dtype=3, np_out=True)
             input_dict = _filter_defaults(input_dict)
             input_dict["validated"] = True
             input_dict["_geometry_prep"] = True
@@ -1314,6 +1306,7 @@ class Molecule(ProtoModel):
         Notes
         -----
         This excludes ghost atoms by default whereas get_molecular_formula always includes them.
+
         """
         if real_only:
             symbols = [sym * int(real) for sym, real in zip(cast(Iterable[str], self.symbols), self.real)]
@@ -1608,6 +1601,27 @@ class Molecule(ProtoModel):
                 assert compare(True, do_mirror, "mirror allowed", quiet=(verbose > 1))
 
         return cmol, {"rmsd": rmsd, "mill": perturbation}
+
+    def convert_v(
+        self, target_version: int, /
+    ) -> Union["qcelemental.models.v1.Molecule", "qcelemental.models.v2.Molecule"]:
+        """Convert to instance of particular QCSchema version."""
+        import qcelemental as qcel
+
+        if check_convertible_version(target_version, error="Molecule") == "self":
+            return self
+
+        dself = self.model_dump()
+        if target_version == 1:
+            # below is assignment rather than popping so Mol() records as set and future Mol.model_dump() includes the field.
+            #   needed for QCEngine Psi4.
+            dself["schema_version"] = 2
+
+            self_vN = qcel.models.v1.Molecule(**dself)
+        else:
+            assert False, target_version
+
+        return self_vN
 
 
 def _filter_defaults(dicary):

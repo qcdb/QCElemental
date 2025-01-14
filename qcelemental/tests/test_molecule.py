@@ -57,7 +57,7 @@ def test_molecule_data_constructor_numpy(Molecule, water_dimer_minima_data):
     assert water_psi.get_molecular_formula(order="hill") == "H4O2"
 
 
-def test_molecule_data_constructor_dict(Molecule, water_dimer_minima_data):
+def test_molecule_data_constructor_dict(Molecule, water_dimer_minima_data, request):
     water_dimer_minima = Molecule.from_data(**water_dimer_minima_data)
 
     water_psi = water_dimer_minima.model_copy()
@@ -73,7 +73,7 @@ def test_molecule_data_constructor_dict(Molecule, water_dimer_minima_data):
     assert (
         water_psi.get_hash() == "3c4b98f515d64d1adc1648fe1fe1d6789e978d34"  # pragma: allowlist secret
     )  # copied from schema_version=1
-    assert water_psi.schema_version == 2
+    assert water_psi.schema_version == 3 if "v2" in request.node.name else 2
     assert water_psi.schema_name == "qcschema_molecule"
 
 

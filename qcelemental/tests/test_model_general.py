@@ -4,7 +4,9 @@ from .addons import drop_qcsk, schema_versions
 
 
 def test_result_properties_default_skip(request, schema_versions):
-    AtomicResultProperties = schema_versions.AtomicResultProperties
+    AtomicResultProperties = (
+        schema_versions.AtomicProperties if ("v2" in request.node.name) else schema_versions.AtomicResultProperties
+    )
 
     obj = AtomicResultProperties(scf_one_electron_energy="-5.0")
     drop_qcsk(obj, request.node.name)
@@ -14,8 +16,10 @@ def test_result_properties_default_skip(request, schema_versions):
     assert obj.dict().keys() == {"scf_one_electron_energy"}
 
 
-def test_result_properties_default_repr(schema_versions):
-    AtomicResultProperties = schema_versions.AtomicResultProperties
+def test_result_properties_default_repr(request, schema_versions):
+    AtomicResultProperties = (
+        schema_versions.AtomicProperties if ("v2" in request.node.name) else schema_versions.AtomicResultProperties
+    )
 
     obj = AtomicResultProperties(scf_one_electron_energy="-5.0")
     assert "none" not in str(obj).lower()

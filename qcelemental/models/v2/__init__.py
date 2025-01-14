@@ -1,27 +1,31 @@
 from . import types
 from .align import AlignmentMill
+from .atomic import (
+    AtomicInput,
+    AtomicProperties,
+    AtomicProtocols,
+    AtomicResult,
+    AtomicSpecification,
+    WavefunctionProperties,
+)
 from .basemodels import ProtoModel
-from .basis import BasisSet
-from .common_models import ComputeError, DriverEnum, FailedOperation, Model, Provenance
+from .basis_set import BasisCenter, BasisSet, ECPPotential, ElectronShell
+from .common_models import DriverEnum, Model, Provenance
+from .failed_operation import ComputeError, FailedOperation
 from .molecule import Molecule
-from .procedures import (
+from .optimization import (
     OptimizationInput,
     OptimizationProperties,
     OptimizationProtocols,
     OptimizationResult,
     OptimizationSpecification,
-    TDKeywords,
+)
+from .torsion_drive import (
     TorsionDriveInput,
+    TorsionDriveKeywords,
+    TorsionDriveProtocols,
     TorsionDriveResult,
     TorsionDriveSpecification,
-)
-from .results import (
-    AtomicInput,
-    AtomicResult,
-    AtomicResultProperties,
-    AtomicResultProtocols,
-    AtomicSpecification,
-    WavefunctionProperties,
 )
 
 
@@ -29,7 +33,7 @@ def qcschema_models():
     return [
         AtomicInput,
         AtomicResult,
-        AtomicResultProperties,
+        AtomicProperties,
         BasisSet,
         Molecule,
         Provenance,

@@ -4,13 +4,13 @@ from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Uni
 from pydantic.v1 import Field, conlist, constr, validator
 
 from ...util import provenance_stamp
-from .basemodels import ProtoModel
+from .basemodels import ProtoModel, check_convertible_version
+from .basis import BasisSet
 from .common_models import (
     ComputeError,
     DriverEnum,
     Model,
     Provenance,
-    check_convertible_version,
     qcschema_input_default,
     qcschema_optimization_input_default,
     qcschema_optimization_output_default,
@@ -22,6 +22,8 @@ from .results import AtomicResult
 
 if TYPE_CHECKING:
     from pydantic.v1.typing import ReprArgs
+
+    import qcelemental
 
 
 class TrajectoryProtocolEnum(str, Enum):
@@ -47,6 +49,27 @@ class OptimizationProtocols(ProtoModel):
     class Config:
         force_skip_defaults = True
 
+    def convert_v(
+        self, target_version: int, /
+    ) -> Union["qcelemental.models.v1.OptimizationProtocols", "qcelemental.models.v2.OptimizationProtocols"]:
+        """Convert to instance of particular QCSchema version."""
+        import qcelemental as qcel
+
+        if check_convertible_version(target_version, error="OptimizationProtocols") == "self":
+            return self
+
+        dself = self.dict()
+        if target_version == 2:
+            # serialization is compact, so use model to assure value
+            dself.pop("trajectory", None)
+            dself["trajectory_results"] = self.trajectory.value
+
+            self_vN = qcel.models.v2.OptimizationProtocols(**dself)
+        else:
+            assert False, target_version
+
+        return self_vN
+
 
 class QCInputSpecification(ProtoModel):
     """
@@ -65,10 +88,6 @@ class QCInputSpecification(ProtoModel):
         description="Additional information to bundle with the computation. Use for schema development and scratch space.",
     )
 
-    @validator("schema_version", pre=True)
-    def _version_stamp(cls, v):
-        return 1
-
     def convert_v(
         self, target_version: int, /
     ) -> Union["qcelemental.models.v1.QCInputSpecification", "qcelemental.models.v2.AtomicSpecification"]:
@@ -82,6 +101,12 @@ class QCInputSpecification(ProtoModel):
         if target_version == 2:
             dself.pop("schema_name")
             dself.pop("schema_version")
+
+            # TODO consider Model.convert_v
+            model = dself.pop("model")
+            if isinstance(self.model.basis, BasisSet):
+                model["basis"] = self.model.basis.convert_v(target_version)
+            dself["model"] = model
 
             self_vN = qcel.models.v2.AtomicSpecification(**dself)
         else:
@@ -115,10 +140,6 @@ class OptimizationInput(ProtoModel):
             ("molecule_hash", self.initial_molecule.get_hash()[:7]),
         ]
 
-    @validator("schema_version", pre=True)
-    def _version_stamp(cls, v):
-        return 1
-
     def convert_v(
         self, target_version: int, /
     ) -> Union["qcelemental.models.v1.OptimizationInput", "qcelemental.models.v2.OptimizationInput"]:
@@ -130,11 +151,15 @@ class OptimizationInput(ProtoModel):
 
         dself = self.dict()
         if target_version == 2:
+            dself.pop("schema_version")  # changed in v2
             dself.pop("hash_index", None)  # no longer used, so dropped in v2
+
+            dself["initial_molecule"] = self.initial_molecule.convert_v(target_version)
 
             spec = {}
             spec["extras"] = dself.pop("extras")
-            spec["protocols"] = dself.pop("protocols")
+            dself.pop("protocols")
+            spec["protocols"] = self.protocols.convert_v(target_version).model_dump()
             spec["specification"] = self.input_specification.convert_v(target_version).model_dump()
             dself.pop("input_specification")
             spec["specification"]["program"] = dself["keywords"].pop(
@@ -156,7 +181,7 @@ class OptimizationResult(OptimizationInput):
     schema_name: constr(  # type: ignore
         strip_whitespace=True, regex=qcschema_optimization_output_default
     ) = qcschema_optimization_output_default
-    schema_version: Literal[1] = 1
+    # Note no schema_version: Literal[1] = Field(1) b/c inherited from OptimizationInput
 
     final_molecule: Optional[Molecule] = Field(..., description="The final molecule of the geometry optimization.")
     trajectory: List[AtomicResult] = Field(
@@ -195,10 +220,6 @@ class OptimizationResult(OptimizationInput):
 
         return v
 
-    @validator("schema_version", pre=True)
-    def _version_stamp(cls, v):
-        return 1
-
     def convert_v(
         self,
         target_version: int,
@@ -229,7 +250,11 @@ class OptimizationResult(OptimizationInput):
         if check_convertible_version(target_version, error="OptimizationResult") == "self":
             return self
 
-        trajectory_class = self.trajectory[0].__class__
+        try:
+            trajectory_class = self.trajectory[0].__class__
+        except IndexError:
+            trajectory_class = None
+
         dself = self.dict()
         if target_version == 2:
             # remove harmless empty error field that v2 won't accept. if populated, pydantic will catch it.
@@ -237,6 +262,8 @@ class OptimizationResult(OptimizationInput):
                 dself.pop("error")
 
             dself.pop("hash_index", None)  # no longer used, so dropped in v2
+            dself.pop("schema_name")  # changed in v2
+            dself.pop("schema_version")  # changed in v2
 
             v1_input_data = {
                 k: dself.pop(k)
@@ -267,7 +294,9 @@ class OptimizationResult(OptimizationInput):
                 dself["input_data"] = v2_input_data
                 optsubptcl = None
 
+            dself["final_molecule"] = self.final_molecule.convert_v(target_version)
             dself["properties"] = {
+                "nuclear_repulsion_energy": self.final_molecule.nuclear_repulsion_energy(),
                 "return_energy": dself["energies"][-1],
                 "optimization_iterations": len(dself["energies"]),
             }
@@ -313,15 +342,11 @@ class OptimizationSpecification(ProtoModel):
     keywords: Dict[str, Any] = Field({}, description="The optimization specific keywords to be used.")
     protocols: OptimizationProtocols = Field(OptimizationProtocols(), description=str(OptimizationProtocols.__doc__))
 
-    @validator("schema_version", pre=True)
-    def _version_stamp(cls, v):
-        return 1
-
     @validator("procedure")
     def _check_procedure(cls, v):
         return v.lower()
 
-    # NOTE: def convert_v() is missing deliberately. Because the v1 schema has a minor and different role only for
+    # NOTE: def convert_v() is missing deliberately. Because the v1 schema has a different role only for
     #   TorsionDrive, it doesn't have nearly enough info to create a v2 schema.
 
 
@@ -392,10 +417,6 @@ class TorsionDriveInput(ProtoModel):
         assert value.driver == DriverEnum.gradient, "driver must be set to gradient"
         return value
 
-    @validator("schema_version", pre=True)
-    def _version_stamp(cls, v):
-        return 1
-
     def convert_v(
         self, target_version: int, /
     ) -> Union["qcelemental.models.v1.TorsionDriveInput", "qcelemental.models.v2.TorsionDriveInput"]:
@@ -414,7 +435,8 @@ class TorsionDriveInput(ProtoModel):
 
             optspec = {}
             optspec["program"] = dself["optimization_spec"].pop("procedure")
-            optspec["protocols"] = dself["optimization_spec"].pop("protocols")
+            dself["optimization_spec"].pop("protocols")
+            optspec["protocols"] = self.optimization_spec.protocols.convert_v(target_version).model_dump()
             optspec["keywords"] = dself["optimization_spec"].pop("keywords")
             optspec["specification"] = gradspec
             dself["optimization_spec"].pop("schema_name")
@@ -426,11 +448,13 @@ class TorsionDriveInput(ProtoModel):
             tdspec["program"] = "torsiondrive"
             tdspec["extras"] = dself.pop("extras")
             tdspec["keywords"] = dself.pop("keywords")
+            tdspec["protocols"] = {"scan_results": "all"}
             tdspec["specification"] = optspec
 
             dtop = {}
             dtop["provenance"] = dself.pop("provenance")
-            dtop["initial_molecules"] = dself.pop("initial_molecule")
+            dself.pop("initial_molecule")
+            dtop["initial_molecule"] = [mol.convert_v(target_version) for mol in self.initial_molecule]
             dtop["specification"] = tdspec
             dself.pop("schema_name")
             dself.pop("schema_version")
@@ -452,7 +476,7 @@ class TorsionDriveResult(TorsionDriveInput):
     """
 
     schema_name: constr(strip_whitespace=True, regex=qcschema_torsion_drive_output_default) = qcschema_torsion_drive_output_default  # type: ignore
-    schema_version: Literal[1] = 1
+    # Note no schema_version: Literal[1] = Field(1) b/c inherited from TorsionDriveInput
 
     final_energies: Dict[str, float] = Field(
         ..., description="The final energy at each angle of the TorsionDrive scan."
@@ -474,10 +498,6 @@ class TorsionDriveResult(TorsionDriveInput):
     )
     error: Optional[ComputeError] = Field(None, description=str(ComputeError.__doc__))
     provenance: Provenance = Field(..., description=str(Provenance.__doc__))
-
-    @validator("schema_version", pre=True)
-    def _version_stamp(cls, v):
-        return 1
 
     def convert_v(
         self, target_version: int, /, *, external_input_data: "TorsionDriveInput" = None
@@ -530,8 +550,9 @@ class TorsionDriveResult(TorsionDriveInput):
             dtop["stderr"] = dself.pop("stderr")
             dtop["success"] = dself.pop("success")
             dtop["final_energies"] = dself.pop("final_energies")
-            dtop["final_molecules"] = dself.pop("final_molecules")
-            dtop["optimization_history"] = {
+            dself.pop("final_molecules")
+            dtop["final_molecules"] = {k: m.convert_v(target_version) for k, m in self.final_molecules.items()}
+            dtop["scan_results"] = {
                 k: [opthist_class(**res).convert_v(target_version) for res in lst]
                 for k, lst in dself["optimization_history"].items()
             }
