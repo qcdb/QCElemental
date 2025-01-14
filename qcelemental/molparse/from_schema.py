@@ -33,6 +33,8 @@ def from_schema(molschema: Dict, *, nonphysical: bool = False, verbose: int = 1)
         ms = molschema["molecule"]
     elif molschema.get("schema_name", "").startswith("qcschema_molecule") and molschema.get("schema_version", "") == 2:
         ms = molschema
+    elif molschema.get("schema_name", "") == "qcschema_molecule" and molschema.get("schema_version", "") == 3:
+        ms = molschema
     else:
         raise ValidationError(
             """Schema not recognized, schema_name/schema_version: {}/{} """.format(

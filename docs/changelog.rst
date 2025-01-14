@@ -37,8 +37,33 @@ New Features
 
 Enhancements
 ++++++++++++
-- (:pr:`363`) 
-- (:pr:`363`) 
+- (:pr:`364`) 
+- (:pr:`364`) 
+- (:pr:`364`) 
+- (:pr:`364`) main storage for ``v2.TorsionDriveResult`` moved from ``optimization_history`` to ``scan_results``.
+- (:pr:`364`) ``v2.TorsionDriveInput.initial_molecule`` restored from ``initial_molecules``.
+- (:pr:`364`) default of OptimizationProtocol.trajectory_results changed to "none" from "all" in v1. much info can now come from properties.
+- (:pr:`364`) v2.OptimizationProtocol renamed trajectory_results from trajectory in accordance with the protocol naming the controlled field. no default change yet.
+- (:pr:`364`) v1/v2: import ElectronShell, BasisCenter, ECPPotential from top level models
+- (:pr:`364`) molparse learns to pass through schema v3, though no new field for Mol yet.
+- (:pr:`364`) ``v2.FailedOperation`` gained schema_name and schema_version=2. unversioned in v1
+- (:pr:`364`) ``v2.BasisSet.schema_version`` is now 2, with no layout change.
+- (:pr:`364`) ``v2.Molecule.schema_version`` is now 3. convert_v of all the models learned to handle the new schema_version.
+- (:pr:`364`) v2: standardizing on In/Res get versions, Ptcl/Kw/Spec get only schema_name. At, Opt, TD
+- (:pr:`364`) v1/v2: removing the version_stamps from the models: At, Opt, TD, Fail, BAsis, Mol. so it will error rather than clobber if constructed with wrong version. convert_v now handles.
+- (:pr:`364`) convert_v functions learned to handle model.basis=BasisSet, not just str.
+- (:pr:`364`) ``Molecule`` and ``BasisSet``  and ``WavefunctionProperties`` learned to ``convert_v`` to interconvert between v1 and v2. No layout changes. 
+  ``BasisSet.schema_name`` standardized to ``qcschema_basis_set``.
+  Both classes get their ``schema_name`` as Literal now
+- (:pr:`360`) ``Molecule`` learned new functions ``element_composition`` and ``molecular_weight``.
+  The first gives a dictionary of element symbols and counts, while the second gives the weight in amu.
+  Both can access the whole molecule or per-fragment like the existing ``nelectrons`` and
+  ``nuclear_repulsion_energy``. All four can now select all atoms or exclude ghosts (default).
+- (:pr:`364`) separated procedures.py and renamed results.py so models are separated into atomic.py, optimization.py, torsion_drive.py, failure models moved to failed_operation.py. basis.py to basis_set.py
+- (:pr:`364`) ``schema_name`` output chanded to result ``qcschema_output`` to ``qcschema_atomic_result``. also opt
+- (:pr:`364`) ``TDKeywords`` renamed to ``TorsionDriveKeywords``
+- (:pr:`364`) ``AtomicResultProtocols`` renamed to ``AtomicProtocols`` and ``AtomicResultProperties`` to ``AtomicProperties``
+- (:pr:`364`) new ``v2.TorsionDriveProtocols`` model with field ``scan_results`` to control all/none/lowest saving of optimizationresults at each grid point. Use "all" for proper conversion to v1.
 - (:pr:`363`) ``v2.TorsionDriveResult`` no longer inherits from Input and now has indep id and extras and new native_files.
 - (:pr:`363`) ``v2.TorsionDriveInput.initial_molecule`` now ``initial_molecules`` as it's a list of >=1 molecules. keep change?
 - (:pr:`363`) ``v2. TorsionDriveSpecification`` is a new model. instead of ``v2.TorsionDriveInput`` having a ``input_specification`` and an ``optimization_spec`` fields, it has a ``specification`` field that is a ``TorsionDriveSpecification`` which in turn hold opt info and in turn gradient/atomic info. 

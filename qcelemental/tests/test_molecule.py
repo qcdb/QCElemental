@@ -57,7 +57,7 @@ def test_molecule_data_constructor_numpy(Molecule, water_dimer_minima_data):
     assert water_psi.get_molecular_formula(order="hill") == "H4O2"
 
 
-def test_molecule_data_constructor_dict(Molecule, water_dimer_minima_data):
+def test_molecule_data_constructor_dict(Molecule, water_dimer_minima_data, request):
     water_dimer_minima = Molecule.from_data(**water_dimer_minima_data)
 
     water_psi = water_dimer_minima.model_copy()
@@ -73,7 +73,7 @@ def test_molecule_data_constructor_dict(Molecule, water_dimer_minima_data):
     assert (
         water_psi.get_hash() == "3c4b98f515d64d1adc1648fe1fe1d6789e978d34"  # pragma: allowlist secret
     )  # copied from schema_version=1
-    assert water_psi.schema_version == 2
+    assert water_psi.schema_version == 3 if "v2" in request.node.name else 2
     assert water_psi.schema_name == "qcschema_molecule"
 
 
@@ -777,3 +777,32 @@ def test_extras(Molecule):
 
     mol = Molecule(symbols=["He"], geometry=[0, 0, 0], extras={"foo": "bar"})
     assert mol.extras["foo"] == "bar"
+
+
+_one_helium_mass = 4.00260325413
+
+
+@pytest.mark.parametrize(
+    "mol_string,args,formula,formula_dict,molecular_weight,nelec, nre",
+    [
+        ("He 0 0 0", {}, "He", {"He": 1}, _one_helium_mass, 2, 0.0),
+        ("He 0 0 0\n--\nHe 0 0 5", {}, "He2", {"He": 2}, 2 * _one_helium_mass, 4, 0.4233417684),
+        ("He 0 0 0\n--\n@He 0 0 5", {}, "He2", {"He": 1}, _one_helium_mass, 2, 0.0),
+        ("He 0 0 0\n--\n@He 0 0 5", {"ifr": 0}, "He2", {"He": 1}, _one_helium_mass, 2, 0.0),
+        ("He 0 0 0\n--\n@He 0 0 5", {"ifr": 1}, "He2", {}, 0.0, 0, 0.0),
+        ("He 0 0 0\n--\n@He 0 0 5", {"real_only": False}, "He2", {"He": 2}, 2 * _one_helium_mass, 4, 0.4233417684),
+        ("He 0 0 0\n--\n@He 0 0 5", {"real_only": False, "ifr": 0}, "He2", {"He": 1}, _one_helium_mass, 2, 0.0),
+        ("He 0 0 0\n--\n@He 0 0 5", {"real_only": False, "ifr": 1}, "He2", {"He": 1}, _one_helium_mass, 2, 0.0),
+        ("4He 0 0 0", {}, "He", {"He": 1}, _one_helium_mass, 2, 0.0),
+        ("5He4 0 0 0", {}, "He", {"He": 1}, 5.012057, 2, 0.0),  # suffix-4 is label
+        ("He@3.14 0 0 0", {}, "He", {"He": 1}, 3.14, 2, 0.0),
+    ],
+)
+def test_molecular_weight(mol_string, args, formula, formula_dict, molecular_weight, nelec, nre, Molecule):
+    mol = Molecule.from_data(mol_string)
+
+    assert (ret := mol.molecular_weight(**args)) == molecular_weight, f"molecular_weight: {ret} != {molecular_weight}"
+    assert (ret := mol.nelectrons(**args)) == nelec, f"nelectrons: {ret} != {nelec}"
+    assert (abs(ret := mol.nuclear_repulsion_energy(**args)) - nre) < 1.0e-5, f"nre: {ret} != {nre}"
+    assert (ret := mol.element_composition(**args)) == formula_dict, f"element_composition: {ret} != {formula_dict}"
+    assert (ret := mol.get_molecular_formula()) == formula, f"get_molecular_formula: {ret} != {formula}"

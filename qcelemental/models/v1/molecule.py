@@ -1,7 +1,7 @@
 """
 Molecule Object Model
 """
-
+import collections
 import hashlib
 import json
 import warnings
@@ -28,12 +28,14 @@ from ...periodic_table import periodictable
 from ...physical_constants import constants
 from ...testing import compare, compare_values
 from ...util import deserialize, measure_coordinates, msgpackext_loads, provenance_stamp, which_import
-from .basemodels import ProtoModel, qcschema_draft
+from .basemodels import ProtoModel, check_convertible_version, qcschema_draft
 from .common_models import Provenance, qcschema_molecule_default
 from .types import Array
 
 if TYPE_CHECKING:
     from pydantic.v1.typing import ReprArgs
+
+    import qcelemental
 
 # Rounding quantities for hashing
 GEOMETRY_NOISE = 8
@@ -375,12 +377,6 @@ class Molecule(ProtoModel):
             values["geometry"] = float_prep(self._orient_molecule_internal(), geometry_noise)
         elif validate or geometry_prep:
             values["geometry"] = float_prep(values["geometry"], geometry_noise)
-
-    @validator("schema_version", pre=True)
-    def _version_stamp(cls, v):
-        # seemingly unneeded, this lets conver_v re-label the model w/o discarding model and
-        #   submodel version fields first.
-        return 2
 
     @validator("geometry")
     def _must_be_3n(cls, v, values, **kwargs):
@@ -836,6 +832,10 @@ class Molecule(ProtoModel):
         >>> hcl.get_molecular_formula()
         ClH
 
+        Notes
+        -----
+        This includes all atoms in the molecule, including ghost atoms. See :py:meth:`element_composition` to exclude.
+
         """
 
         from ...molutil import molecular_formula_from_symbols
@@ -1096,13 +1096,15 @@ class Molecule(ProtoModel):
         tensor[2][1] = tensor[1][2] = -1.0 * np.sum(weight * geom[:, 1] * geom[:, 2])
         return tensor
 
-    def nuclear_repulsion_energy(self, ifr: int = None) -> float:
+    def nuclear_repulsion_energy(self, ifr: int = None, real_only: bool = True) -> float:
         r"""Nuclear repulsion energy.
 
         Parameters
         ----------
         ifr
             If not `None`, only compute for the `ifr`-th (0-indexed) fragment.
+        real_only
+            Only include real atoms in the sum.
 
         Returns
         -------
@@ -1110,7 +1112,10 @@ class Molecule(ProtoModel):
             Nuclear repulsion energy in entire molecule or in fragment.
 
         """
-        Zeff = [z * int(real) for z, real in zip(cast(Iterable[int], self.atomic_numbers), self.real)]
+        if real_only:
+            Zeff = [z * int(real) for z, real in zip(cast(Iterable[int], self.atomic_numbers), self.real)]
+        else:
+            Zeff = self.atomic_numbers
         atoms = list(range(self.geometry.shape[0]))
 
         if ifr is not None:
@@ -1123,13 +1128,15 @@ class Molecule(ProtoModel):
                 nre += Zeff[at1] * Zeff[at2] / dist
         return nre
 
-    def nelectrons(self, ifr: int = None) -> int:
+    def nelectrons(self, ifr: int = None, real_only: bool = True) -> int:
         r"""Number of electrons.
 
         Parameters
         ----------
         ifr
             If not `None`, only compute for the `ifr`-th (0-indexed) fragment.
+        real_only
+            Only include real atoms in the sum.
 
         Returns
         -------
@@ -1137,7 +1144,10 @@ class Molecule(ProtoModel):
             Number of electrons in entire molecule or in fragment.
 
         """
-        Zeff = [z * int(real) for z, real in zip(cast(Iterable[int], self.atomic_numbers), self.real)]
+        if real_only:
+            Zeff = [z * int(real) for z, real in zip(cast(Iterable[int], self.atomic_numbers), self.real)]
+        else:
+            Zeff = self.atomic_numbers
 
         if ifr is None:
             nel = sum(Zeff) - self.molecular_charge
@@ -1146,6 +1156,69 @@ class Molecule(ProtoModel):
             nel = sum([zf for iat, zf in enumerate(Zeff) if iat in self.fragments[ifr]]) - self.fragment_charges[ifr]
 
         return int(nel)
+
+    def molecular_weight(self, ifr: int = None, real_only: bool = True) -> float:
+        r"""Molecular weight in uamu.
+
+        Parameters
+        ----------
+        ifr
+            If not `None`, only compute for the `ifr`-th (0-indexed) fragment.
+        real_only
+            Only include real atoms in the sum.
+
+        Returns
+        -------
+        mw : float
+            Molecular weight in entire molecule or in fragment.
+
+        """
+        if real_only:
+            masses = [mas * int(real) for mas, real in zip(cast(Iterable[float], self.masses), self.real)]
+        else:
+            masses = self.masses
+
+        if ifr is None:
+            mw = sum(masses)
+
+        else:
+            mw = sum([mas for iat, mas in enumerate(masses) if iat in self.fragments[ifr]])
+
+        return mw
+
+    def element_composition(self, ifr: int = None, real_only: bool = True) -> Dict[str, int]:
+        r"""Atomic count map.
+
+        Parameters
+        ----------
+        ifr
+            If not `None`, only compute for the `ifr`-th (0-indexed) fragment.
+        real_only
+            Only include real atoms.
+
+        Returns
+        -------
+        composition : Dict[str, int]
+            Atomic count map.
+
+        Notes
+        -----
+        This excludes ghost atoms by default whereas get_molecular_formula always includes them.
+
+        """
+        if real_only:
+            symbols = [sym * int(real) for sym, real in zip(cast(Iterable[str], self.symbols), self.real)]
+        else:
+            symbols = self.symbols
+
+        if ifr is None:
+            count = collections.Counter(sym.title() for sym in symbols)
+
+        else:
+            count = collections.Counter(sym.title() for iat, sym in enumerate(symbols) if iat in self.fragments[ifr])
+
+        count.pop("", None)
+        return dict(count)
 
     def align(
         self,
@@ -1426,6 +1499,28 @@ class Molecule(ProtoModel):
                 assert compare(True, do_mirror, "mirror allowed", quiet=(verbose > 1))
 
         return cmol, {"rmsd": rmsd, "mill": perturbation}
+
+    def convert_v(
+        self, target_version: int, /
+    ) -> Union["qcelemental.models.v1.Molecule", "qcelemental.models.v2.Molecule"]:
+        """Convert to instance of particular QCSchema version."""
+        import qcelemental as qcel
+
+        if check_convertible_version(target_version, error="Molecule") == "self":
+            return self
+
+        loss_store = {}
+        dself = self.model_dump()
+        if target_version == 2:
+            # below is assignment rather than popping so Mol() records as set and future Mol.model_dump() includes the field.
+            #   QCEngine _build_model convert_v(2) can lose it otherwise, and molparse machinery wants to see the field.
+            dself["schema_version"] = 3
+
+            self_vN = qcel.models.v2.Molecule(**dself)
+        else:
+            assert False, target_version
+
+        return self_vN
 
 
 def _filter_defaults(dicary):

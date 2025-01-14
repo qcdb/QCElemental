@@ -1,11 +1,14 @@
 from enum import Enum
-from typing import Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Union
 
 from pydantic import Field, constr, field_validator
 from typing_extensions import Annotated
 
 from ...exceptions import ValidationError
-from .basemodels import ProtoModel, qcschema_draft
+from .basemodels import ProtoModel, check_convertible_version, qcschema_draft
+
+if TYPE_CHECKING:
+    import qcelemental
 
 NonnegativeInt = Annotated[int, Field(ge=0)]
 
@@ -167,9 +170,8 @@ class BasisSet(ProtoModel):
     A quantum chemistry basis description.
     """
 
-    schema_name: constr(strip_whitespace=True, pattern="^(qcschema_basis)$") = Field(  # type: ignore
-        "qcschema_basis",
-        description=f"The QCSchema specification to which this model conforms. Explicitly fixed as qcschema_basis.",
+    schema_name: Literal["qcschema_basis_set"] = Field(
+        "qcschema_basis_set", description=(f"The QCSchema specification to which this model conforms.")
     )
     schema_version: Literal[2] = Field(  # type: ignore
         2,
@@ -246,6 +248,22 @@ class BasisSet(ProtoModel):
 
         return ret
 
-    @field_validator("schema_version", mode="before")
-    def _version_stamp(cls, v):
-        return 2
+    def convert_v(
+        self, target_version: int, /
+    ) -> Union["qcelemental.models.v1.BasisSet", "qcelemental.models.v2.BasisSet"]:
+        """Convert to instance of particular QCSchema version."""
+        import qcelemental as qcel
+
+        if check_convertible_version(target_version, error="BasisSet") == "self":
+            return self
+
+        dself = self.model_dump()
+        if target_version == 1:
+            dself.pop("schema_name")  # changes in v1
+            dself.pop("schema_version")  # changes in v1
+
+            self_vN = qcel.models.v1.BasisSet(**dself)
+        else:
+            assert False, target_version
+
+        return self_vN

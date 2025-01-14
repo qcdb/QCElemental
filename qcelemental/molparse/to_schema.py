@@ -19,10 +19,11 @@ def to_schema(
     molrec
         Psi4 json Molecule spec.
     dtype
-        {'psi4', 1, 2}
+        {'psi4', 1, 2, 3}
         Molecule schema format.
         ``1`` is https://molssi-qc-schema.readthedocs.io/en/latest/auto_topology.html V1 + #44 + #53
         ``2`` is ``1`` with internal schema_name/version (https://github.com/MolSSI/QCSchema/pull/60)
+        ``3`` is ``2`` with no change (future: additional field for unit box parameters)
     units
         {'Bohr', 'Angstrom'}
         Units in which to write string. There is not an option to write in
@@ -63,7 +64,7 @@ def to_schema(
         qcschema["units"] = units
         qcschema["name"] = name
 
-    elif dtype in [1, 2]:
+    elif dtype in [1, 2, 3]:
         if units != "Bohr":
             raise ValidationError("""QCSchema {} allows only 'Bohr' coordinates, not {}.""".format(dtype, units))
 
@@ -98,6 +99,9 @@ def to_schema(
         elif dtype == 2:
             qcschema = molecule
             qcschema.update({"schema_name": "qcschema_molecule", "schema_version": 2})
+        elif dtype == 3:
+            qcschema = molecule
+            qcschema.update({"schema_name": "qcschema_molecule", "schema_version": 3})
 
     else:
         raise ValidationError(

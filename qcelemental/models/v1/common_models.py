@@ -4,11 +4,13 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 import numpy as np
 from pydantic.v1 import Field
 
-from .basemodels import ProtoModel, qcschema_draft
+from .basemodels import ProtoModel, check_convertible_version, qcschema_draft
 from .basis import BasisSet
 
 if TYPE_CHECKING:
     from pydantic.v1.typing import ReprArgs
+
+    import qcelemental
 
 
 # Encoders, to be deprecated
@@ -145,15 +147,6 @@ class FailedOperation(ProtoModel):
             assert False, target_version
 
         return self_vN
-
-
-def check_convertible_version(ver: int, error: str):
-    if ver == 1:
-        return "self"
-    elif ver == 2:
-        return True
-    else:
-        raise ValueError(f"QCSchema {error} version={version} does not exist for conversion.")
 
 
 qcschema_input_default = "qcschema_input"

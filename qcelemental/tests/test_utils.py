@@ -385,7 +385,8 @@ def atomic_result_data(request):
         "success": True,
     }
     if "v2" in request.node.name:
-        data["schema_name"] = "qcschema_atomic_output"
+        data["schema_name"] = "qcschema_atomic_result"
+        data["schema_version"] = 2
         data["input_data"] = {
             "molecule": data["molecule"],
             "specification": {
@@ -395,6 +396,7 @@ def atomic_result_data(request):
                 "protocols": data.pop("protocols"),
             },
         }
+        data["input_data"]["molecule"]["schema_version"] = 3
 
     return data
 

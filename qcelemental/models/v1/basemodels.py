@@ -198,9 +198,20 @@ class ProtoModel(BaseModel):
         bool
             True if the objects match.
         """
-        from ..testing import compare_recursive
+        from ...testing import compare_recursive
 
         return compare_recursive(self, other, **kwargs)
+
+
+def check_convertible_version(ver: int, error: str):
+    """Standardize version/error handling for v1 QCSchema."""
+
+    if ver == 1:
+        return "self"
+    elif ver == 2:
+        return True
+    else:
+        raise ValueError(f"QCSchema {error} version={ver} does not exist for conversion.")
 
 
 # remove when QCFractal merges `next`

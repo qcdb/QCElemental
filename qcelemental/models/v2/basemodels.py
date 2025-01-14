@@ -261,7 +261,7 @@ class ProtoModel(BaseModel):
         bool
             True if the objects match.
         """
-        from ..testing import compare_recursive
+        from ...testing import compare_recursive
 
         return compare_recursive(self, other, **kwargs)
 
@@ -280,6 +280,17 @@ class ProtoModel(BaseModel):
         output_dict.update(kwargs)
         # Finally, check against the Extended Config Dict
         return ExtendedConfigDict(**output_dict)
+
+
+def check_convertible_version(ver: int, error: str):
+    """Standardize the version/error handling for v2 QCSchema."""
+
+    if ver == 1:
+        return True
+    elif ver == 2:
+        return "self"
+    else:
+        raise ValueError(f"QCSchema {error} version={ver} does not exist for conversion.")
 
 
 qcschema_draft = "http://json-schema.org/draft-04/schema#"

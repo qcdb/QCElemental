@@ -2,7 +2,7 @@ from . import types  # ever used?
 from .align import AlignmentMill
 from .basemodels import AutodocBaseSettings  # remove when QCFractal merges `next`
 from .basemodels import ProtoModel
-from .basis import BasisSet
+from .basis import BasisCenter, BasisSet, ECPPotential, ElectronShell
 from .common_models import ComputeError, DriverEnum, FailedOperation, Model, Provenance
 from .molecule import Molecule
 from .procedures import Optimization  # scheduled for removal
