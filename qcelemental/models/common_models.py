@@ -90,7 +90,7 @@ class ComputeError(ProtoModel):
         "information as well.",
     )
     extras: Optional[Dict[str, Any]] = Field(  # type: ignore
-        None,
+        {},
         description="Additional information to bundle with the error.",
     )
 
