@@ -14,9 +14,11 @@ def to_string(
     *,
     atom_format: str = None,
     ghost_format: str = None,
+    post_format: str = None,
     width: int = 17,
     prec: int = 12,
     return_data: bool = False,
+    use_masses: bool = False,
 ) -> Union[str, Tuple[str, Dict]]:
     r"""Format a string representation of QM molecule.
 
@@ -45,6 +47,9 @@ def to_string(
     ghost_format
         General format is ``'@{elem}'``. Like `atom_format`, but this formatter
         is used when `real=False`. To suppress ghost atoms, use `ghost_format=''`.
+    post_format
+        General format is ``''``. Like `atom_format`, but this formatter can
+        add text beyond z-coord in element-x-y-z. Uncommon to call directly.
     width
         Field width for formatting coordinate float.
     prec
@@ -53,6 +58,10 @@ def to_string(
         Whether to return dictionary with additional info from the molrec that's
         not expressible in the string but may be of interest to the QC program.
         Note that field names are in QCSchema, not molrec, language.
+    use_masses
+        Write mass data from `molrec` to string. Most commonly, masses are
+        omitted from format so that CMS program internal mass data can be used.
+        Available for `dtype`: nwchem
 
     Returns
     -------
@@ -220,10 +229,12 @@ def to_string(
     elif dtype == "nwchem":
         atom_format = "{elem}{elbl}"
         ghost_format = "bq{elem}{elbl}"
+        if use_masses:
+            post_format = " mass {mass}"
         # TODO handle which units valid
         umap = {"bohr": "bohr", "angstrom": "angstroms", "nm": "nanometers", "pm": "picometers"}
 
-        atoms = _atoms_formatter(molrec, geom, atom_format, ghost_format, width, prec, 2)
+        atoms = _atoms_formatter(molrec, geom, atom_format, ghost_format, width, prec, 2, post_format=post_format)
 
         first_line = f"""geometry units {umap.get(units.lower())}"""
         # noautosym nocenter  # no reorienting input geometry
@@ -464,7 +475,7 @@ def to_string(
         return smol_ret
 
 
-def _atoms_formatter(molrec, geom, atom_format, ghost_format, width, prec, sp, xyze=False):
+def _atoms_formatter(molrec, geom, atom_format, ghost_format, width, prec, sp, *, xyze=False, post_format=""):
     """Format a list of strings, one per atom from `molrec`."""
 
     nat = geom.shape[0]
@@ -493,6 +504,11 @@ def _atoms_formatter(molrec, geom, atom_format, ghost_format, width, prec, sp, x
                 atom.append(nuc)
 
         atom.extend([fxyz.format(x, width=width, prec=prec) for x in geom[iat]])
+
+        if post_format:
+            post = post_format.format(**atominfo)
+            atom.append(post)
+
         if xyze:
             atom.append(atom.pop(0).rstrip())
         atoms.append(sp.join(atom))
@@ -500,7 +516,7 @@ def _atoms_formatter(molrec, geom, atom_format, ghost_format, width, prec, sp, x
     return atoms
 
 
-def formula_generator(elem):
+def formula_generator(elem: List[str]) -> str:
     """Return simple chemical formula from element list `elem`.
 
     >>> formula_generator(['C', 'Ca', 'O', 'O', 'Ag']

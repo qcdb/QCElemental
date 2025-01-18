@@ -98,6 +98,13 @@ H_other              -{au2:.12f}     0.000000000000     0.000000000000
 
 end
 """,
+    "ans2_nwchem_au_mass": f"""geometry units bohr
+Co                    0.000000000000     0.000000000000     0.000000000000   mass 58.93319429
+bqH                   2.000000000000     0.000000000000     0.000000000000   mass 1.00782503223
+H_other              -2.000000000000     0.000000000000     0.000000000000   mass 1.00782503223
+
+end
+""",
     "ans2_madness_au": f"""geometry
 units au
 Co                    0.000000000000     0.000000000000     0.000000000000
@@ -252,6 +259,7 @@ QCElemental
         (("subject2", {"dtype": "xyz", "units": "angstrom", "ghost_format": ""}), "ans2c_ang"),
         (("subject2", {"dtype": "cfour", "units": "angstrom"}), "ans2_cfour_ang"),
         (("subject2", {"dtype": "nwchem", "units": "angstrom"}), "ans2_nwchem_ang"),
+        (("subject2", {"dtype": "nwchem", "units": "bohr", "use_masses": True}), "ans2_nwchem_au_mass"),
         (("subject2", {"dtype": "madness", "units": "bohr"}), "ans2_madness_au"),
         (("subject2", {"dtype": "madness", "units": "angstrom"}), "ans2_madness_ang"),
         (("subject2", {"dtype": "mrchem", "units": "bohr"}), "ans2_mrchem_au"),

@@ -773,9 +773,11 @@ class Molecule(ProtoModel):
         *,
         atom_format: str = None,
         ghost_format: str = None,
+        post_format: str = None,
         width: int = 17,
         prec: int = 12,
         return_data: bool = False,
+        use_masses: bool = False,
     ):
         r"""Returns a string that can be used by a variety of programs.
 
@@ -790,9 +792,11 @@ class Molecule(ProtoModel):
             units=units,
             atom_format=atom_format,
             ghost_format=ghost_format,
+            post_format=post_format,
             width=width,
             prec=prec,
             return_data=return_data,
+            use_masses=use_masses,
         )
 
     def get_hash(self):
