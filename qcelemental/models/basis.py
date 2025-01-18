@@ -1,4 +1,6 @@
+import math
 from enum import Enum
+from functools import lru_cache
 from typing import Dict, List, Optional
 
 try:
@@ -13,12 +15,21 @@ from .basemodels import ProtoModel, qcschema_draft
 class NonnegativeInt(ConstrainedInt):
     ge = 0
 
+M_SQRTPI_CUBED = math.pi * math.sqrt(math.pi)
+
 
 class HarmonicType(str, Enum):
     """The angular momentum representation of a shell."""
 
     spherical = "spherical"
     cartesian = "cartesian"
+
+
+class NormalizationScheme(str, Enum):
+
+    cca = "cca"
+    erd = "erd"
+    bse = "bse"
 
 
 class ElectronShell(ProtoModel):
@@ -33,6 +44,9 @@ class ElectronShell(ProtoModel):
         ...,
         description="General contraction coefficients for the shell; individual list components will be the individual segment contraction coefficients.",
         min_items=1,
+    )
+    normalization_scheme: Optional[NormalizationScheme] = Field(
+        None, description="Normalization scheme for this shell."
     )
 
     class Config(ProtoModel.Config):
@@ -58,6 +72,45 @@ class ElectronShell(ProtoModel):
                 raise ValueError("The length for a fused shell must equal the length of coefficients.")
 
         return v
+
+    @validator("normalization_scheme", always=True)
+    def _check_normsch(cls, v, values):
+
+        # Bad construction, pass on errors
+        try:
+            normsch = cls._calculate_normsch(values["angular_momentum"], values["exponents"], values["coefficients"])
+        except KeyError:
+            return v
+
+        if v is None:
+            v = normsch
+        else:
+            if v != normsch:
+                raise ValidationError(f"Calculated normalization_scheme ({normsch}) does not match supplied ({v}).")
+
+        return v
+
+    @classmethod
+    def _calculate_normsch(cls, am: int, exps: List[float], coefs: List[List[float]]) -> NormalizationScheme:
+        def single_am(idx, l):
+            m = l + 1.5
+
+            # try CCA
+            candidate_already_normalized_coefs = coefs[idx]
+            norm = cls._cca_contraction_normalization(l, exps, candidate_already_normalized_coefs)
+            if abs(norm - 1) < 1.0e-10:
+                return NormalizationScheme.cca
+
+            # try ERD
+            candidate_already_normalized_coefs = [coefs[idx][i] / pow(exps[i], 0.5 * m) for i in range(len(exps))]
+            norm = cls._erd_normalization(l, exps, candidate_already_normalized_coefs)
+            if abs(norm - 1) < 1.0e-10:
+                return NormalizationScheme.erd
+
+            # BSE not confirmable
+            return NormalizationScheme.bse
+
+        return _collapse_equal_list(single_am(idx, l) for idx, l in enumerate(am))
 
     def nfunctions(self) -> int:
         r"""
@@ -85,6 +138,126 @@ class ElectronShell(ProtoModel):
         """
 
         return (len(self.coefficients) != 1) and (len(self.angular_momentum) == 1)
+
+    def normalize_shell(self, dtype: NormalizationScheme) -> "ElectronShell":
+        """Construct new ElectronShell with coefficients normalized by ``dtype``."""
+
+        naive_coefs = self._denormalize_to_bse()
+
+        bse_shell = self.dict()
+        bse_shell["coefficients"] = naive_coefs
+        bse_shell["normalization_scheme"] = "bse"
+        bse_shell = ElectronShell(**bse_shell)
+
+        if dtype == "bse":
+            return bse_shell
+        elif dtype in ["cca", "psi4"]:
+            norm_coef = bse_shell._cca_normalize_shell()
+        elif dtype == "erd":
+            norm_coef = bse_shell._erd_normalize_shell()
+
+        new_shell = self.dict()
+        new_shell["coefficients"] = norm_coef
+        new_shell["normalization_scheme"] = dtype
+        return ElectronShell(**new_shell)
+
+    def _denormalize_to_bse(self) -> List[List[float]]:
+        """Compute replacement coefficients for any-normalization shell ``self`` that are within a scale factor of BSE unnormalization."""
+
+        def single_am(idx, l):
+
+            if self.normalization_scheme == "cca":
+                prim_norm = self._cca_primitive_normalization(l, self.exponents)
+                return [self.coefficients[idx][i] / prim_norm[i] for i in range(len(self.exponents))]
+
+            elif self.normalization_scheme == "erd":
+                m = l + 1.5
+                return [self.coefficients[idx][i] / pow(self.exponents[i], 0.5 * m) for i in range(len(self.exponents))]
+
+            elif self.normalization_scheme == "bse":
+                return self.coefficients[idx]
+
+        return [single_am(idx, l) for idx, l in enumerate(self.angular_momentum)]
+
+    @staticmethod
+    def _cca_primitive_normalization(l: int, exps: List[float]) -> List[float]:
+        """Compute CCA normalization factor for primitive shell using angular momentum ``l`` and exponents ``exps``."""
+        m = l + 1.5
+        prim_norm = [
+            math.sqrt((pow(2.0, l) * pow(2.0 * exps[p], m)) / (M_SQRTPI_CUBED * _df(2 * l))) for p in range(len(exps))
+        ]
+
+        return prim_norm
+
+    @staticmethod
+    def _cca_contraction_normalization(l: int, exps: List[float], coefs: List[List[float]]) -> float:
+        """Compute CCA normalization factor for coefficients ``coefs`` using angular momentum ``l`` and exponents ``exps``."""
+
+        m = l + 1.5
+        summ = 0.0
+        for i in range(len(exps)):
+            for j in range(len(exps)):
+                z = pow(exps[i] + exps[j], m)
+                summ += (coefs[i] * coefs[j]) / z
+
+        tmp = (M_SQRTPI_CUBED * _df(2 * l)) / pow(2.0, l)
+        norm = math.sqrt(1.0 / (tmp * summ))
+        # except (ZeroDivisionError, ValueError): [idx][i] = 1.0
+
+        return norm
+
+    def _cca_normalize_shell(self) -> List[List[float]]:
+        """Compute replacement coefficients for unnormalized (BSE-normalized) shell ``self`` that fulfill CCA normalization."""
+
+        if self.normalization_scheme != "bse":
+            raise TypeError('Unnormalized shells expected. Use ``normalize_shell(dtype="cca")`` for flexibility.')
+
+        def single_am(idx, l):
+            prim_norm = ElectronShell._cca_primitive_normalization(l, self.exponents)
+            norm = ElectronShell._cca_contraction_normalization(
+                l, self.exponents, [self.coefficients[idx][i] * prim_norm[i] for i in range(len(self.exponents))]
+            )
+            return [self.coefficients[idx][i] * norm * prim_norm[i] for i in range(len(self.exponents))]
+
+        return [single_am(idx, l) for idx, l in enumerate(self.angular_momentum)]
+
+    def _erd_normalization(l: int, exps: List[float], coefs: List[List[float]]) -> float:
+        """Compute ERD normalization factor for coefficients ``coefs`` using angular momentum ``l`` and exponents ``exps``."""
+
+        m = l + 1.5
+        summ = 0.0
+        for i in range(len(exps)):
+            for j in range(i + 1):
+                temp = coefs[i] * coefs[j]
+                temp3 = 2.0 * math.sqrt(exps[i] * exps[j]) / (exps[i] + exps[j])
+                temp *= pow(temp3, m)
+
+                summ += temp
+                if i != j:
+                    summ += temp
+
+        prefac = 1.0
+        if l > 1:
+            prefac = pow(2.0, 2 * l) / _df(2 * l)
+        norm = math.sqrt(prefac / summ)
+
+        return norm
+
+    def _erd_normalize_shell(self) -> List[List[float]]:
+        """Compute replacement coefficients for unnormalized (BSE-normalized) shell ``self`` that fulfill ERD normalization."""
+
+        if self.normalization_scheme != "bse":
+            raise TypeError('Unnormalized shells expected. Use ``normalize_shell(dtype="erd")`` for flexibility.')
+
+        def single_am(idx, l):
+            m = l + 1.5
+
+            norm = ElectronShell._erd_normalization(l, self.exponents, self.coefficients[idx])
+            return [
+                self.coefficients[idx][i] * norm * pow(self.exponents[i], 0.5 * m) for i in range(len(self.exponents))
+            ]
+
+        return [single_am(idx, l) for idx, l in enumerate(self.angular_momentum)]
 
 
 class ECPType(str, Enum):
@@ -229,3 +402,52 @@ class BasisSet(ProtoModel):
             ret += center_count[center]
 
         return ret
+
+    def normalize_shell(self, dtype: NormalizationScheme) -> "BasisSet":
+        """Construct new BasisSet with coefficients of all shells in center_data normalized by ``dtype``."""
+
+        new_bs = self.dict()
+
+        for lbl, center in self.center_data.items():
+            for ish, sh in enumerate(center.electron_shells):
+                new_bs["center_data"][lbl]["electron_shells"][ish] = sh.normalize_shell(dtype)
+
+        return BasisSet(**new_bs)
+
+    def normalization_scheme(self) -> NormalizationScheme:
+        """Identify probable normalization scheme governing shell ``coefficients`` in center_data.
+
+        Returns
+        -------
+        NormalizationScheme
+            Satisfied by all ElectronShells.
+
+        Raises
+        ------
+        TypeError
+            If the BasisSet's ElectronShells are detected to have inconsistent normalization schemes.
+
+        """
+        shell_norm = []
+        for lbl, center in self.center_data.items():
+            for ish, sh in enumerate(center.electron_shells):
+                shell_norm.append(sh.normalization_scheme)
+
+        return _collapse_equal_list(shell_norm)
+
+
+@lru_cache(maxsize=500)
+def _df(i):
+    if i in [0, 1, 2]:
+        return 1.0
+    else:
+        return (i - 1) * _df(i - 2)
+
+
+def _collapse_equal_list(lst):
+    lst = list(lst)
+    first = lst[0]
+    if lst.count(first) == len(lst):
+        return first
+    else:
+        raise TypeError(f"Inconsistent members in list: {lst}")
