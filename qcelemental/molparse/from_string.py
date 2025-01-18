@@ -671,7 +671,7 @@ def _filter_mints(string, unsettled=False):
 xyz1strict = re.compile(r"\A" + r"(?P<nat>\d+)" + r"\Z")
 SIMPLENUCLEUS = r"""((?P<E>[A-Z]{1,3})|(?P<Z>\d{1,3}))"""
 atom_cartesian_strict = re.compile(
-    r"\A" + r"(?P<nucleus>" + SIMPLENUCLEUS + r")" + SEP + CARTXYZ + r"\Z", re.IGNORECASE | re.VERBOSE
+    r"\A" + r"(?P<nucleus>" + SIMPLENUCLEUS + r")" + SEP + CARTXYZ + ".*" + r"\Z", re.IGNORECASE | re.VERBOSE
 )
 
 xyz1 = re.compile(r"\A" + r"(?P<nat>\d+)" + r"[\s,]*" + r"((?P<ubohr>(bohr|au))|(?P<uang>ang))?" + r"\Z", re.IGNORECASE)
@@ -737,9 +737,17 @@ def _filter_xyz(string, strict):
         for iln, line in enumerate(string.split("\n")):
             line = line.strip()
             if iln == 0:
+                try:
+                    num_atoms = int(line)
+                except ValueError:
+                    # Not a standard xyz format; continue with regular process
+                    num_atoms = None
                 line = re.sub(xyz1strict, "", line)
             elif iln == 1:
                 continue
+            elif num_atoms and iln > num_atoms + 1:
+                # If standard xyz ignore everything after cartesian coords
+                break
             else:
                 line = re.sub(atom_cartesian_strict, process_atom_cartesian, line)
             if line:
