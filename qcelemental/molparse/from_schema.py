@@ -7,7 +7,7 @@ from ..util import provenance_stamp
 from .from_arrays import from_arrays
 
 
-def from_schema(molschema: Dict, *, nonphysical: bool = False, verbose: int = 1) -> Dict:
+def from_schema(molschema: Dict, *, nonphysical: bool = False, throw_reorder: bool = True, verbose: int = 1) -> Dict:
     r"""Construct molecule dictionary representation from non-Psi4 schema.
 
     Parameters
@@ -16,6 +16,10 @@ def from_schema(molschema: Dict, *, nonphysical: bool = False, verbose: int = 1)
         Dictionary form of Molecule following known schema.
     nonphysical
         Do allow masses outside an element's natural range to pass validation?
+    throw_reorder
+        Do, when non-contiguous fragments detected, raise
+        ValidationError (``True``) or to proceed to reorder atoms to
+        contiguize fragments (``False``).
     verbose
         Amount of printing.
 
@@ -54,7 +58,7 @@ def from_schema(molschema: Dict, *, nonphysical: bool = False, verbose: int = 1)
         mass=ms.get("masses", None),
         real=ms.get("real", None),
         elbl=ms.get("atom_labels", None),
-        throw_reorder=True,
+        throw_reorder=throw_reorder,
     )
 
     molrec = from_arrays(

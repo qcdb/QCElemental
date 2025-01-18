@@ -485,6 +485,38 @@ def test_charged_fragment():
 #    })
 
 
+@pytest.mark.parametrize(
+    "validate, allow_noncontiguous_but_reorder", [(True, True), (True, False), (False, True), (False, False)]
+)
+def test_noncontig(validate, allow_noncontiguous_but_reorder):
+    mol = {
+        "fragments": [[2, 0], [1]],
+        "geometry": np.array([[0.0, 0.0, 1.0], [0.0, 0.0, 2.0], [0.0, 0.0, 0.0]]),
+        "symbols": np.array(["Li", "H", "He"]),
+        "fragment_multiplicities": [4, 2],
+    }
+
+    if validate:
+        if allow_noncontiguous_but_reorder:
+            mol = Molecule(**mol, validate=validate, allow_noncontiguous_but_reorder=allow_noncontiguous_but_reorder)
+            assert compare(["He", "Li", "H"], mol.symbols)
+            assert compare([2, 3, 1], mol.atomic_numbers)
+            assert compare_values([[0, 0, 0], [0, 0, 1], [0, 0, 2]], mol.geometry)
+            assert compare([4, 2], mol.fragment_multiplicities)
+
+        else:
+            with pytest.raises(qcel.ValidationError) as e:
+                Molecule(**mol, validate=validate, allow_noncontiguous_but_reorder=allow_noncontiguous_but_reorder)
+                assert "QCElemental would need to reorder atoms to accommodate non-contiguous fragments" in str(e.value)
+
+    else:
+        mol = Molecule(**mol, validate=validate, allow_noncontiguous_but_reorder=allow_noncontiguous_but_reorder)
+        assert compare(["Li", "H", "He"], mol.symbols)
+        assert compare([3, 1, 2], mol.atomic_numbers)
+        assert compare_values([[0, 0, 1], [0, 0, 2], [0, 0, 0]], mol.geometry)
+        assert compare([4, 2], mol.fragment_multiplicities)
+
+
 @pytest.mark.parametrize("group_fragments, orient", [(True, True), (False, False)])  # original  # Psi4-like
 def test_get_fragment(group_fragments, orient):
     mol = Molecule(

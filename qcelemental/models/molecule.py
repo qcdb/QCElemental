@@ -354,14 +354,22 @@ class Molecule(ProtoModel):
             # original_keys = set(kwargs.keys())  # revive when ready to revisit sparsity
 
             nonphysical = kwargs.pop("nonphysical", False)
+            throw_reorder = not (kwargs.pop("allow_noncontiguous_but_reorder", False))  # experimental
             schema = to_schema(
-                from_schema(kwargs, nonphysical=nonphysical), dtype=kwargs["schema_version"], copy=False, np_out=True
+                from_schema(kwargs, nonphysical=nonphysical, throw_reorder=throw_reorder),
+                dtype=kwargs["schema_version"],
+                copy=False,
+                np_out=True,
             )
             schema = _filter_defaults(schema)
 
             kwargs["validated"] = True
             kwargs = {**kwargs, **schema}  # Allow any extra fields
             validate = True
+        else:
+            # these kwargs only relevant for validation
+            kwargs.pop("nonphysical", None)
+            kwargs.pop("allow_noncontiguous_but_reorder", None)
 
         if "extras" not in kwargs:
             kwargs["extras"] = {}
