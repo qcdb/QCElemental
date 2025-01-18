@@ -1,6 +1,6 @@
 from enum import Enum
 from functools import partial
-from typing import TYPE_CHECKING, Any, Dict, Optional, Set, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Set, Union
 
 try:
     from typing import Literal
@@ -29,6 +29,121 @@ if TYPE_CHECKING:
         from pydantic.typing import ReprArgs
 
 
+class MolecularDescriptors(ProtoModel):
+    r"""
+    Molecular descriptors for cheminformatics and AI/ML applications following the MolSSI QCSchema.
+    """
+
+    canonical_smiles: Optional[str] = Field(
+        None, description="Canonical (non-kekulized, implicit hydrogens) SMILES string representing the molecule."
+    )
+    inchi_key: Optional[str] = Field(None, description="Internet searchable InChI hash.")
+    inchi: Optional[str] = Field(None, description="InChI string for molecule.")
+    num_val_e: Optional[int] = Field(None, description="Valence electron count")
+    num_rad_e: Optional[int] = Field(None, description="Radical electron count.")
+    num_hetero: Optional[int] = Field(None, description="Number of heteroatoms (not C/H).")
+    num_no: Optional[int] = Field(None, description="Number of N/O atoms.")
+    num_nhoh: Optional[int] = Field(None, description="Number of NH/OH groups.")
+    num_h_acceptors: Optional[int] = Field(None, description="Number of hydrogen-bond acceptors.")
+    num_h_donors: Optional[int] = Field(None, description="Number of hydrogen-bond donors.")
+    num_rot_bonds: Optional[int] = Field(None, description="Number of (relatively) freely rotating bonds.")
+    num_spiro_atoms: Optional[int] = Field(None, description="Number of spiro atoms.")
+    num_bridgehead_atoms: Optional[int] = Field(None, description="Number of bridgehead atoms")
+    atomic_charges: Optional[Dict[str, List[float]]] = Field(
+        None,
+        description="Calculated atomic charges where 'gasteiger' is following method in (Gasteiger, J.; Marseli, M. Tetrahedron, 1980), and 'eem' is Electronegativity Equalization Method following (Mortier, W.J.; Van Genechten, K.; Gasteiger, J. JACS, 1985 and Mortier, W.J.; Ghosh, S.K.; Shankar, S. JACS, 1986).",
+    )
+    stereochemistry: Optional[List[Union[Tuple[int, str], Tuple[int, int, str]]]] = Field(
+        None, description="CIP (R/S, E/Z) stereochemistry by atom indices and stereo type."
+    )
+    aromaticity: Optional[Dict[str, List[Union[int, Tuple[int, int]]]]] = Field(
+        None, description="Dictionary of bond indices and atom indices of aromatic bonds."
+    )
+    ring_info: Optional[Dict[str, Union[int, Dict[int, Dict[str, Union[int, bool, List[int]]]]]]] = Field(
+        None,
+        description="Ring counts by type info for each ring where the key is the ring index and contains the size, whether it's aromatic(bool) and/or a heterocycle(bool), and atom indices.",
+    )
+    logp: Optional[float] = Field(
+        None,
+        description="Octanol-water partition coefficient approximation from Wildman, S.A.; Crippen, G.M. J. Chem. Inf. Comput. Sci., 1999.",
+    )
+    mol_refract: Optional[float] = Field(
+        None,
+        description="Molar refractivity in m^3/mol from Wildman, S.A.; Crippen, G.M. J. Chem. Inf. Comput. Sci., 1999.",
+    )
+    surface_area: Optional[Dict[str, float]] = Field(
+        None,
+        description="Surface area approximations by different methods, containing Topological Polar Surface Area(TPSA) (Ertl P. et al, J. Med. Chem., 2000), the CCG approximations Labute ASA, PEOE VSA, SMR VSA, SlogP VSA and EState VSA (Labute, P. J. Mol. Graph. Model., 2000), an EState VSA variant developed by RDKit, and an average of the VSA methods.",
+    )
+    plane_best_fit: Optional[float] = Field(
+        None,
+        description="Average distance in Angstrom from the plane of best fit of a molecule's atoms (Firth, N.C.; Brown, N.; Blagg, J. J. Chem. Inf. Model., 2012).",
+    )
+    mo_inertia: Optional[Dict[str, List[float]]] = Field(
+        None,
+        description="Principal and normalized moments of inertia as described in (Sauer, W.H.B.; Schwarz, M.K. J. Chem. Inf. Comput. Sci., 2003).",
+    )
+    rad_gyration: Optional[float] = Field(
+        None,
+        description="Radius of gyration from Arteca, G.A. 'Molecular Shape Descriptors' in Reviews in Computational Chemistry vol. 9.",
+    )
+    inertial_shape_factor: Optional[float] = Field(
+        None,
+        description="From Todeschini, R.; Consonni, V. 'Descriptors from Molecular Geometry' in Handbook of Chemoinformatics.",
+    )
+    eccentricity: Optional[float] = Field(
+        None,
+        description="Elliptical eccentricities derived from principal inertia moments, from Arteca, G.A. 'Molecular Shape Descriptors' in Reviews in Computational Chemistry vol. 9.",
+    )
+    asphericity: Optional[float] = Field(
+        None,
+        description="Molecular asphericity derived from principal moments of inertia, from Baumgartner, A. J. Chem. Phys. 1993.",
+    )
+    spherocity_idx: Optional[float] = Field(
+        None,
+        description="A function of the eigenvalues of the covariance matrix of atomic coordinates, from Todeschini, R.; Consonni, V. 'Descriptors from Molecular Geometry' in Handbook of Chemoinformatics.",
+    )
+    balaban_idx: Optional[float] = Field(
+        None, description="2D Topological index from Balaban, J. Chem. Phys. Lett. 1982."
+    )
+    bertz_ct: Optional[float] = Field(None, description="2D topological index from Bertz, S.H. JACS, 1981.")
+    ipc_idx: Optional[float] = Field(
+        None, description="2D topological index from Bonchev, D.; Trinajstic, N. J. Chem. Phys. 1977."
+    )
+    hall_kier_parameters: Optional[Dict[str, float]] = Field(
+        None,
+        description="A set of 2D topological indexes from Hall, L.H.; Kier, L.B. 'The Molecular Connectivity Chi Indexes and ...' in Reviews in Computational Chemistry Vol. 2, also including Phi index from Kier, L.B. Mol. Inform., 1989 (journal previously called Quant. Struct.-Act. Relat.)",
+    )
+    bcut2D: Optional[Dict[str, float]] = Field(
+        None,
+        description="High and low eigenvalues of topologically weighted matrices where an atomic property (charge, polarizability, etc) fills diagonal as a non-fingerprint based measure of similarity, from Pearlman, R.S.; Smith,K.M. 'Novel Software Tools for Chemical Diversity' in 3D QSAR in Drug Design Vol. 2.",
+    )
+    autocorr2D: Optional[List[float]] = Field(
+        None,
+        description="2D topological based autocorrelation of atomic physicochemical properties from Todeschini, R.; Consonni, V. 'Descriptors from Molecular Geometry' in Handbook of Chemoinformatics.",
+    )
+    autocorr3D: Optional[List[float]] = Field(
+        None,
+        description="3D geometry based autocorrelation of atomic physicochemical properties from Todeschini, R.; Consonni, V. 'Descriptors from Molecular Geometry' in Handbook of Chemoinformatics.",
+    )
+    morse: Optional[List[float]] = Field(
+        None,
+        description="3D Molecule Representation of Structures based on Electron diffraction (MoRSE) from Todeschini, R.; Consonni, V. 'Descriptors from Molecular Geometry' in Handbook of Chemoinformatics.",
+    )
+    rdf: Optional[List[float]] = Field(
+        None,
+        description="Radial Distance Function (RDF) descriptors from Todeschini, R.; Consonni, V. 'Descriptors from Molecular Geometry' in Handbook of Chemoinformatics.",
+    )
+    whim: Optional[List[float]] = Field(
+        None,
+        description="Weighted Holistic Invariant Molecular (WHIM) descriptors, based on projections of atoms along the principal axis, from Todeschini, R.; Consonni, V. 'Descriptors from Molecular Geometry' in Handbook of Chemoinformatics.",
+    )
+    getaway: Optional[List[float]] = Field(
+        None,
+        description="GEometry, Topology, and Atom-Weights AssemblY (GETAWAY) 3D descriptors, based on statistical analysis of Molecular Influence Matrix, from Todeschini, R.; Consonni, V. 'Descriptors from Molecular Geometry' in Handbook of Chemoinformatics.",
+    )
+
+
 class AtomicResultProperties(ProtoModel):
     r"""
     Named properties of quantum chemistry computations following the MolSSI QCSchema.
@@ -44,7 +159,9 @@ class AtomicResultProperties(ProtoModel):
     calcinfo_nmo: Optional[int] = Field(None, description="The number of molecular orbitals for the computation.")
     calcinfo_nalpha: Optional[int] = Field(None, description="The number of alpha electrons in the computation.")
     calcinfo_nbeta: Optional[int] = Field(None, description="The number of beta electrons in the computation.")
-    calcinfo_natom: Optional[int] = Field(None, description="The number of atoms in the computation.")
+    calcinfo_natom: Optional[int] = Field(
+        None, description="The number of atoms in the computation."
+    )  # perhaps this shouldn't be optional
 
     # Canonical
     nuclear_repulsion_energy: Optional[float] = Field(None, description="The nuclear repulsion energy.")
@@ -62,6 +179,9 @@ class AtomicResultProperties(ProtoModel):
         description=f"The Hessian of the requested method, identical to :attr:`~qcelemental.models.AtomicResult.return_result` for :attr:`~qcelemental.models.AtomicInput.driver`\\ =\\ :attr:`~qcelemental.models.DriverEnum.hessian` computations.",
         units="E_h/a0^2",
     )
+
+    # Cheminformatics (currently just rdkit) Keywords
+    descriptors: Optional[MolecularDescriptors] = Field(None, description=MolecularDescriptors.__doc__)
 
     # SCF Keywords
     scf_one_electron_energy: Optional[float] = Field(
