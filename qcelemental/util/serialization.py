@@ -206,13 +206,15 @@ class JSONArrayEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-def json_dumps(data: Any) -> str:
+def json_dumps(data: Any, **kwargs) -> str:
     r"""Safe serialization of a Python dictionary to JSON string representation using all known encoders.
 
     Parameters
     ----------
     data : Any
         A encodable python object.
+    kwargs : Any
+        Keyword arguments for json.dumps()
 
     Returns
     -------
@@ -220,7 +222,7 @@ def json_dumps(data: Any) -> str:
         A JSON representation of the data.
     """
 
-    return json.dumps(data, cls=JSONArrayEncoder)
+    return json.dumps(data, cls=JSONArrayEncoder, **kwargs)
 
 
 def json_loads(data: str) -> Any:
@@ -316,7 +318,7 @@ def msgpack_loads(data: str) -> Any:
 ## Helper functions
 
 
-def serialize(data: Any, encoding: str) -> Union[str, bytes]:
+def serialize(data: Any, encoding: str, **kwargs) -> Union[str, bytes]:
     r"""Encoding Python objects using the provided encoder.
 
     Parameters
@@ -325,6 +327,8 @@ def serialize(data: Any, encoding: str) -> Union[str, bytes]:
         A encodable python object.
     encoding : str
         The type of encoding to perform: {'json', 'json-ext', 'msgpack-ext'}
+    kwargs: Any
+        For passing additional kwargs to serialization functions, such as indent
 
     Returns
     -------
@@ -333,7 +337,7 @@ def serialize(data: Any, encoding: str) -> Union[str, bytes]:
 
     """
     if encoding.lower() == "json":
-        return json_dumps(data)
+        return json_dumps(data, **kwargs)
     elif encoding.lower() == "json-ext":
         return jsonext_dumps(data)
     elif encoding.lower() == "msgpack":

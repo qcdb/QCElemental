@@ -469,6 +469,14 @@ def test_failed_operation(result_data_fixture, request):
     assert "its all good" in failed_json
 
 
+def test_model_json_allows_kwargs(result_data_fixture):
+    result = qcel.models.AtomicResult(**result_data_fixture)
+    no_indent = result.json()
+    assert "\n" not in no_indent
+    indent = result.json(indent=2)
+    assert "\n" in indent
+
+
 def test_result_properties_array(request):
     lquad = [1, 2, 3, 2, 4, 5, 3, 5, 6]
 
